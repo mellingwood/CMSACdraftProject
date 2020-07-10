@@ -1,0 +1,12 @@
+---
+title: "data_wrangling"
+output: html_document
+---
+
+This will be an R markdown to document what I do to the dataset in the hopes of getting it the way I want it...
+
+```{r}
+library(tidyverse)
+player_season_data <- read_csv("../Data/NHLPlayerSeasonData0506to1920.csv")
+```
+
