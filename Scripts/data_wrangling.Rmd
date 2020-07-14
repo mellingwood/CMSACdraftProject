@@ -9,4 +9,95 @@ This will be an R markdown to document what I do to the dataset in the hopes of 
 library(tidyverse)
 player_season_data <- read_csv("../Data/NHLPlayerSeasonData0506to1920.csv")
 ```
+so that's the player-season data I got from hockey-reference.com, of all the players active in each season between 05-06 and 19-20
+
+now I want to try to rearrange that data so that it has one column for each player and shows their career stats
+
+```{r}
+per_season_career_data <- as.data.frame(unique(player_season_data$Player)) %>%
+  rename(player_name = 'unique(player_season_data$Player)')
+
+new_var <- c(0)
+
+per_season_career_data %>%
+  mutate(gp = new_var)
+  
+player_season_data %>%
+  filter(Player == per_season_career_data$player_name) %>%
+  summarize(gp = mean(GP))
+
+```
+
+ok that is not working the way I want it to...
+I think I'll try it as a loop, if I can figure out how to write a loop in R...
+first I need to create a list of player names...
+
+```{r}
+list_of_player_names <- as.data.frame(unique(player_season_data$Player)) %>%
+  rename(player_name = 'unique(player_season_data$Player)')
+```
+
+then I want to define the loop that says "for each of these names, find the average of the stats for the rows containing that name"
+
+```{r}
+for (i in length(list_of_player_names)) {
+  name <- list_of_player_names[,i]
+  
+  per_season_career_data <- as.data.frame(name)
+  
+  condense_stats(name)
+}
+```
+
+```{r}
+condense_stats <- function (name, new_dataset = per_season_career_data,
+                      old_dataset = player_season_data) {
+  just_this_player <- old_dataset %>%
+    filter(Player == name)
+  
+  per_season_career_data$gp <- 0
+  
+  new_dataset$gp[i] <- mean(just_this_player$GP)
+}
+```
+so this is not working the way I want it to either, I think I will probably give up on this and go with the data that Jill found instead...
+
+wait I found a function in dplyr that might work...
+
+```{r}
+per_season_career_data <- player_season_data %>%
+  group_by(Player) %>%
+  summarize(gp = sum(GP), goals = sum(G), assists = sum(A), 
+            points = sum(PTS), plusminus = sum(PlusMinus), PIM = sum(PIM),
+            pointShares = sum(PS), evenStrengthG = sum(EvenStrengthG),
+            powerPlayG = sum(PowerPlayG), shortHandG = sum(ShortHandG),
+            gameWinningG = sum(GameWinningG), 
+            evenStrengthA = sum(EvenStrengthA), powerPlayA = sum(PowerPlayA),
+            shortHandA = sum(ShortHandA), shots = sum(S),
+            TOI = sum(TOI), blocks = sum(BLK), hits = sum(HIT), 
+            foWins = sum(FOW), foLosses = sum(FOL), 
+            CorsiFor = sum(CF), CorsiAgainst = sum(CA),
+            FenwickFor = sum(FF), FenwickAgainst = sum(FA), 
+            oiSHperc = mean(oiSHperc), oiSVperc = mean(oiSVperc), 
+            oZSperc = mean(oZSperc), dZSperc = mean(dZSperc), 
+            #TOIper60 = mean(TOIper60),
+            #TOIatEvenStrength = mean(TOIatEvenStrength),
+            takeaways = sum(TK), giveaways = sum(GV), 
+            shotAttempts = sum(Sattempts), thruperc = mean(Thruperc))
+```
+
+it doesn't like the time variables, so I'm just leaving those out
+
+now for the ones that required mutate rather than summarize
+
+```{r}
+per_season_career_data <- per_season_career_data %>%
+  mutate(shotPerc = goals / shots, averageTOI = TOI / gp,
+         foPerc = foWins / (foWins + foLosses), 
+         CorsiPerc = CorsiFor / (CorsiFor + CorsiAgainst),
+         FenwickPerc = FenwickFor / (FenwickFor + FenwickAgainst),
+         PDO = oiSHperc + oiSVperc)
+```
+
+
 
