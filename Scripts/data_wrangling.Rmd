@@ -3,8 +3,12 @@ title: "data_wrangling"
 output: html_document
 ---
 
-This will be an R markdown to document what I do to the dataset in the hopes of getting it the way I want it...
+This will be an R markdown to document what I do to the datasets in the hopes of getting them the way I want them...
 
+__________________________________________________________________________
+Question 1: what is the value of a draft pick? What is the relationship between pick order and success in the NHL?
+
+(using draft pick data and player career data)
 ```{r}
 library(tidyverse)
 player_season_data <- read_csv("../Data/NHLPlayerSeasonData0506to1920.csv")
@@ -97,7 +101,134 @@ per_season_career_data <- per_season_career_data %>%
          CorsiPerc = CorsiFor / (CorsiFor + CorsiAgainst),
          FenwickPerc = FenwickFor / (FenwickFor + FenwickAgainst),
          PDO = oiSHperc + oiSVperc)
+
+player_career_data <- per_season_career_data
 ```
 
+that works and does what I want! hallelujah!
 
+I want to save it as a .csv just so I have it, just in case...
+```{r}
+write_csv(player_career_data, "../Data/playerCareerData0506to1920.csv")
+```
+so now we need to combine with the draft data!
+
+```{r}
+draft_data <- read_csv("../Data/NHLdraftdata2005-2016.csv")
+```
+now we need to match players' career data to their draft data based on their name and player ID
+
+first isolate the player ID
+
+```{r}
+draft_data <- draft_data %>%
+  mutate(ID = gsub(".*\\\\", " ", Player))
+player_career_data <- player_career_data %>%
+  mutate(ID = gsub(".*\\\\", " ", Player))
+```
+now we have to make sure that we only have the columns that we actually want, and that none of the columns have the same name
+
+```{r}
+draft_data_clean <- draft_data %>%
+  select(Year, Round, Overall, Team, Player, Nat., Pos, Age, To, 
+         YrsPlayed, AmateurTeam, AmateurLeague, ID) %>%
+  rename(draft_year = Year)
+
+player_career_data_clean <- player_career_data %>%
+  select(-Player)
+```
+
+now we can actually combine them using a left join, which will make players that were drafted but never played have NAs in the NHL stats columns, and will make those who played in the NHL but were never drafted (or were drafted pre-2005) disappear...
+
+```{r}
+full_draft_data_w_NAs <- left_join(draft_data_clean,
+                                   player_career_data_clean,
+                             by = "ID")
+```
+so that dataset has NAs for the players who were drafted but never played, and we want to replace those NAs with zeros to include them in the analysis...
+
+```{r}
+full_draft_data <- full_draft_data_w_NAs %>%
+  filter(!is.na(Nat.))
+full_draft_data[is.na(full_draft_data)] <- 0
+```
+and I want to save this as a csv too just to have it...
+
+```{r}
+write_csv(full_draft_data, "../Data/draftAndCareerData0506to1920.csv")
+```
+
+so that is the dataset we will use to answer that question...
+
+_________________________________________________________________________
+Question 2: Can we predict what our pick order spot will be next year?
+  2.1: What is the relationship between season performance and draft pick order?
+  2.2: How can we use team-season data in the season n-1 to predict performance in season n?
+  
+so to answer question 2.1, we need information on past draft orders, and information on past team-season performance
+
+```{r}
+simple_team_season_data <- 
+  read_csv("../Data/teamSeasonDataSimple0809to1819.csv")
+draft_order_data <- read_csv("../Data/draftOrder09to19.csv")
+```
+but then I will need to create a column in each that describes the team and the end of the season year/draft year
+
+```{r}
+draft_order_data <- draft_order_data %>%
+  rename(tm = Team) %>%
+  mutate(tm_season = str_c(tm, Year, sep = "_"))
+
+simple_team_season_data <- simple_team_season_data %>%
+  mutate(season_end = Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2008-09", 2009,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2009-10", 2010,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2010-11", 2011,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2011-12", 2012,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2012-13", 2013,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2013-14", 2014,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2014-15", 2015,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2015-16", 2016,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2016-17", 2017,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2017-18", 2018,
+                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
+                                             == "2018-19", 2019,
+                                             simple_team_season_data$Season)
+simple_team_season_data <- simple_team_season_data %>%
+  mutate(tm_season = str_c(Team, season_end, sep = "_"))
+
+```
+so they match, now to join them
+
+```{r}
+season_to_draft_order_data <- left_join(simple_team_season_data, 
+                                        draft_order_data,
+                                        by = "tm_season")
+```
+then I can save it in a csv as well
+
+```{r}
+write_csv(season_to_draft_order_data,
+          "../Data/seasonToDraftOrderData0809to1819.csv")
+```
 
