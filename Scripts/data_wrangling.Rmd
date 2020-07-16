@@ -181,39 +181,39 @@ draft_order_data <- draft_order_data %>%
 
 simple_team_season_data <- simple_team_season_data %>%
   mutate(season_end = Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2008-09", 2009,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2009-10", 2010,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2010-11", 2011,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2011-12", 2012,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2012-13", 2013,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2013-14", 2014,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2014-15", 2015,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2015-16", 2016,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2016-17", 2017,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2017-18", 2018,
-                                             simple_team_season_data$Season)
-simple_team_season_data$season_end <- ifelse(simple_team_season_data$Season
-                                             == "2018-19", 2019,
-                                             simple_team_season_data$Season)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2008-09", 2009,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2009-10", 2010,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2010-11", 2011,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2011-12", 2012,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2012-13", 2013,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2013-14", 2014,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2014-15", 2015,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2015-16", 2016,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2016-17", 2017,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2017-18", 2018,
+         simple_team_season_data$season_end)
+simple_team_season_data$season_end <- 
+  ifelse(simple_team_season_data$Season == "2018-19", 2019,
+         simple_team_season_data$season_end)
 simple_team_season_data <- simple_team_season_data %>%
   mutate(tm_season = str_c(Team, season_end, sep = "_"))
 
@@ -225,6 +225,15 @@ season_to_draft_order_data <- left_join(simple_team_season_data,
                                         draft_order_data,
                                         by = "tm_season")
 ```
+some of those column names need some cleaning
+```{r}
+season_to_draft_order_data <- season_to_draft_order_data %>%
+  rename(PTSperc = `PTS%`) %>%
+  rename(RPtperc = `RPt%`) %>%
+  rename(RgPtperc = `RgPt%`)
+```
+
+
 then I can save it in a csv as well
 
 ```{r}

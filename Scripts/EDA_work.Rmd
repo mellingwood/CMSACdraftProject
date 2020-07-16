@@ -1,0 +1,31 @@
+---
+title: "EDA_work"
+output: html_document
+---
+
+this will be a document for initial EDA work for the three questions
+
+first I can read in the datasets from the csv files I saved them in from the wrangling step
+
+```{r}
+drafted_players_data <- read_csv("../Data/draftAndCareerData0506to1920.csv")
+
+season_draft_data <- read_csv("../Data/seasonToDraftOrderData0809to1819.csv")
+
+complex_team_season_data <-
+  read_csv("../Data/teamSeasonDataComplex0809to1920.csv")
+```
+also need the tidyverse, as usual
+```{r}
+library(tidyverse)
+```
+
+I guess I'll focus on the subquestion involving predicting draft order from season performance
+
+```{r}
+season_draft_data %>%
+  ggplot(aes(x = PTSperc, y = PickOrder)) +
+  geom_point() +
+  theme_bw()
+```
+
