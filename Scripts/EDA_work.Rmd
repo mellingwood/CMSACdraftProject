@@ -8,12 +8,14 @@ this will be a document for initial EDA work for the three questions
 first I can read in the datasets from the csv files I saved them in from the wrangling step
 
 ```{r}
+library(tidyverse)
+
 drafted_players_data <- read_csv("../Data/draftAndCareerData0506to1920.csv")
 
 season_draft_data <- read_csv("../Data/seasonToDraftOrderData0809to1819.csv")
 
 complex_team_season_data <-
-  read_csv("../Data/teamSeasonDataComplex0809to1920.csv")
+  read_csv("../Data/predictingPpercNextSeason.csv")
 ```
 also need the tidyverse, as usual
 ```{r}
@@ -26,6 +28,27 @@ I guess I'll focus on the subquestion involving predicting draft order from seas
 season_draft_data %>%
   ggplot(aes(x = PTSperc, y = PickOrder)) +
   geom_point() +
+  labs(x = "Point Percentage", y = "First Round Pick Order", 
+       title = "Season Performance Predicts First Round Pick Order... 
+       Sort Of") +
   theme_bw()
 ```
+what about season n performance predicting performance in season n+1 (just for the purposes of EDA for the preliminary presentation)
+
+```{r}
+complex_team_season_data %>%
+  ggplot(aes(x = `P%`, y = next_year_pts_perc)) +
+  geom_point() +
+  labs(x = "Points Percentage in Season n", 
+       y = "Points Percentage in Season n + 1", 
+       title = "Teams are relatively consistent year-to-year") +
+  theme_bw()
+```
+is there a better relationship there with another stat?
+```{r}
+complex_team_season_data %>%
+  ggplot(aes(x = xGoalsPercentage, y = next_year_pts_perc)) +
+  geom_point()
+```
+that actually does look kind of better, but it's a bit weird that the values are so restricted...
 

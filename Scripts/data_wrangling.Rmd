@@ -172,6 +172,17 @@ simple_team_season_data <-
   read_csv("../Data/teamSeasonDataSimple0809to1819.csv")
 draft_order_data <- read_csv("../Data/draftOrder09to19.csv")
 ```
+first I need to do some renaming to make Atlanta be Winnipeg the whole time because that makes sense for tracking over time since it's essentially the same team but with different names
+
+```{r}
+draft_order_data$Team <- ifelse(draft_order_data$Team == "ATL", 
+                                "WPG", draft_order_data$Team)
+
+simple_team_season_data$Team <- ifelse(simple_team_season_data$Team == "ATL",
+                                  "WPG", simple_team_season_data$Team)
+```
+
+
 but then I will need to create a column in each that describes the team and the end of the season year/draft year
 
 ```{r}
@@ -239,5 +250,84 @@ then I can save it in a csv as well
 ```{r}
 write_csv(season_to_draft_order_data,
           "../Data/seasonToDraftOrderData0809to1819.csv")
+```
+
+So switching gears again, I need to manipulate the dataset that Jill built with the complex team season data to predict performance in season n+1 from stats in season n
+
+```{r}
+complex_team_season_data <-
+  read_csv("../Data/teamSeasonDataComplex0809to1920.csv")
+```
+```{r}
+complex_team_season_data <- complex_team_season_data %>%
+  mutate(season_end = season)
+
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2008-09", 2009,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2009-10", 2010,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2010-11", 2011,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2011-12", 2012,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2012-13", 2013,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2013-14", 2014,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2014-15", 2015,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2015-16", 2016,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2016-17", 2017,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2017-18", 2018,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2018-19", 2019,
+         complex_team_season_data$season_end)
+complex_team_season_data$season_end <- 
+  ifelse(complex_team_season_data$season == "2019-20", 2020,
+         complex_team_season_data$season_end)
+
+complex_team_season_data <- complex_team_season_data %>%
+  mutate(tm_season = str_c(team, season_end, sep = "_"))
+
+```
+
+so the dataset with all of the stats is set up, now I need to make a second dataset containing next year's points percentage and match them up
+
+```{r}
+points_percent_nplus1 <- complex_team_season_data %>%
+  dplyr::select(team, season_end, `P%`)
+points_percent_nplus1$season_end <- 
+  as.numeric(points_percent_nplus1$season_end) - 1
+
+points_percent_nplus1 <- points_percent_nplus1 %>%
+  mutate(tm_season = str_c(team, season_end, sep = "_"))
+
+
+mismatched <- points_percent_nplus1 %>%
+  dplyr::select(tm_season, `P%`) %>%
+  rename(next_year_pts_perc = `P%`)
+
+points_percent_nplus1 <- left_join(complex_team_season_data, mismatched,
+                                   by = "tm_season")
+
+```
+
+and I want to save it as a csv...
+
+```{r}
+write_csv(points_percent_nplus1, "../Data/predictingPpercNextSeason.csv")
 ```
 
