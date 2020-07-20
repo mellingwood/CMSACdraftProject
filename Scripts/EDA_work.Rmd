@@ -52,3 +52,25 @@ complex_team_season_data %>%
 ```
 that actually does look kind of better, but it's a bit weird that the values are so restricted...
 
+what if I try to calculate xGperc myself?
+
+```{r}
+complex_team_season_data <- complex_team_season_data %>%
+  mutate(xGperc = xGoalsFor / (xGoalsFor + xGoalsAgainst))
+
+complex_team_season_data %>%
+  select(xGoalsPercentage, xGperc) %>%
+  head()
+```
+so that so that looks more like what I want
+
+```{r}
+complex_team_season_data %>%
+  ggplot(aes(x = xGperc, y = next_year_pts_perc)) +
+  labs(x = "Expected Goals Percent- xG For / (xG For + xG Against)",
+       y = "Next Year's Point Percent",
+       title = "This Year's xG% Predicts Next Year's Performance") +
+  geom_point() +
+  theme_bw()
+```
+

@@ -1,0 +1,164 @@
+---
+title: "modeling_pick_order"
+output: html_document
+---
+
+setup
+```{r}
+library(tidyverse)
+library(caret)
+library(mgcv)
+
+season_draft_data <- read_csv("../Data/seasonToDraftOrderData0809to1819.csv")
+
+```
+
+
+I want to create a model to predict pick order based on season performance, as measured by points percent
+
+first I need to create the folds for 10-fold cross validation
+```{r}
+set.seed(2020)
+
+train_i <- createDataPartition(y = season_draft_data$PickOrder,
+                               p = 0.9, list = FALSE) %>%
+  as.numeric()
+
+train_pickorder_data <- season_draft_data[train_i,]
+test_pickorder_data <- season_draft_data[-train_i,]
+
+```
+then I will try to use the caret package to build and test models of different types
+
+simple linear regression
+```{r}
+set.seed(2000)
+init_linear_pickorder_train <-
+  train(PickOrder ~ PTSperc,
+        data = season_draft_data, method = "lm", #can use lots of methods!
+        trControl = trainControl("cv", number = 10),
+        preProcess = c("center", "scale"))
+
+init_linear_pickorder_train$results
+```
+
+
+K nearest neighbors
+```{r}
+set.seed(2002)
+tune_knn_pickorder_train <-
+  train(PickOrder ~ PTSperc,
+        data = season_draft_data, method = "knn", #can use lots of methods!
+        trControl = trainControl("cv", number = 10),
+        preProcess = c("center", "scale"),
+        tuneGrid = expand.grid(k = 2:40)) #pick manually, but can't use tibble
+#expand.grid is really useful and powerful, creates all combos
+
+plot(tune_knn_pickorder_train)
+```
+so it looks like the best is with k = 29
+```{r}
+tune_knn_pickorder_train$bestTune
+```
+
+```{r}
+tune_knn_pickorder_train$results[28,]
+```
+
+
+GAM
+```{r}
+set.seed(2008)
+init_gam_pickorder_train <-
+  train(PickOrder ~ PTSperc,
+        data = season_draft_data, method = "gam", #can use lots of methods!
+        trControl = trainControl("cv", number = 10),
+        preProcess = c("center", "scale"),
+        tuneGrid = data.frame(method = "GCV.Cp", select = FALSE))
+init_gam_pickorder_train$results
+```
+
+Gradient boosted machine
+
+```{r}
+xgb_tune_grid <- 
+  expand.grid(nrounds = seq(from = 20, to = 200, by = 20),
+              eta = c(0.025, 0.05, 0.1, 0.3, 0.6),
+              max_depth = c(1:4),
+              gamma = 0, colsample_bytree = 1, #leave all vars
+              min_child_weight = 1, #same as node size
+              subsample = 1) #let all data be included
+
+xgb_tune_control <- trainControl(method = "cv", number = 10,
+                                 verboseIter = FALSE)
+
+set.seed(2001)
+init_xgb_tune_pickorder_train <- 
+  train(x = dplyr::select(season_draft_data, PTSperc),
+                  y = season_draft_data$PickOrder,
+                  trControl = xgb_tune_control,
+                  tuneGrid = xgb_tune_grid,
+                  method = "xgbTree",
+                  verbose = TRUE)
+```
+```{r}
+init_xgb_tune_pickorder_train$bestTune
+```
+
+```{r}
+init_xgb_tune_pickorder_train$results[162,]
+```
+
+so I have all the models made, but now I want to figure out what their out-of-sample RMSE is and show those as a table or chart
+
+linear
+```{r}
+pickorder_linear_test_preds <- predict(init_linear_pickorder_train, test_pickorder_data)
+RMSE(pickorder_linear_test_preds, test_pickorder_data$PickOrder)
+
+```
+KNN
+```{r}
+pickorder_knn_test_preds <- predict(tune_knn_pickorder_train, test_pickorder_data)
+RMSE(pickorder_knn_test_preds, test_pickorder_data$PickOrder)
+```
+GAM
+```{r}
+pickorder_gam_test_preds <- predict(init_gam_pickorder_train, test_pickorder_data)
+RMSE(pickorder_gam_test_preds, test_pickorder_data$PickOrder)
+```
+
+GBM
+```{r}
+pickorder_xgb_test_preds <- predict(init_xgb_tune_pickorder_train, test_pickorder_data)
+RMSE(pickorder_xgb_test_preds, test_pickorder_data$PickOrder)
+```
+make a chart...
+```{r}
+pickorder_rmse <- as_tibble(NULL)
+
+pickorder_rmse <- bind_rows( c(model = "Linear", 
+                              RMSE = RMSE(pickorder_linear_test_preds,
+                                          test_pickorder_data$PickOrder)),
+                            c(model = "K Nearest Neighbors", 
+                              RMSE = RMSE(pickorder_knn_test_preds,
+                                     test_pickorder_data$PickOrder)),
+                            c(model = "GAM", 
+                              RMSE = RMSE(pickorder_gam_test_preds,
+                                          test_pickorder_data$PickOrder)),
+                            c(model = "Gradient Boosted", 
+                              RMSE = RMSE(pickorder_xgb_test_preds,
+                                          test_pickorder_data$PickOrder)))
+
+pickorder_rmse_chart <- pickorder_rmse %>%
+  mutate(RMSE = as.numeric(RMSE)) %>%
+  ggplot(aes(x = model, y = RMSE)) +
+  geom_point() + 
+  coord_flip() +
+  labs(y = "RMSE", x = "Model Type", 
+       title = "Holdout error rate among tuned models") +
+  theme_bw()
+pickorder_rmse_chart
+```
+So the best model is the GAM!
+
