@@ -1,0 +1,86 @@
+---
+title: "modeling_next_season"
+output: html_document
+---
+
+setup
+```{r}
+library(tidyverse)
+library(caret)
+library(mgcv)
+
+complex_team_season_data <-
+  read_csv("../Data/predictingPpercNextSeason.csv")
+complex_team_season_data <- complex_team_season_data %>%
+  mutate(xGperc = xGoalsFor / (xGoalsFor + xGoalsAgainst))
+```
+
+Now I want to work on modeling next season's win percentage based on this season's stats...
+I think I need to do some data manipulation to turn these into per-game stats and remove some of the named data
+```{r}
+next_year_model_data <- complex_team_season_data %>%
+  select(-team, -season, -season_end, -tm_season) %>%
+  mutate(xGFor_per_game = xGoalsFor / GP, 
+         shotsFor_per_game = shotsOnGoalFor / GP,
+         shotAttemptsFor_per_game = shotAttemptsFor / GP,
+         goalsFor_per_game = goalsFor / GP,
+         penaltiesFor_per_game = penaltiesFor / GP,
+         faceoffsWonFor_per_game = faceOffsWonFor / GP,
+         hitsFor_per_game = hitsFor / GP,
+         takeawaysFor_per_game = takeawaysFor / GP,
+         giveawaysFor_per_game = giveawaysFor / GP,
+         xGAgainst_per_game = xGoalsAgainst / GP,
+         shotsAgainst_per_game = shotsOnGoalAgainst / GP,
+         shotAttemptsAgainst_per_game = shotAttemptsAgainst / GP,
+         goalsAgainst_per_game = goalsAgainst / GP,
+         penaltiesAgainst_per_game = penaltiesAgainst / GP,
+         faceoffsWonAgainst_per_game = faceOffsWonAgainst / GP,
+         hitsAgainst_per_game = hitsAgainst / GP,
+         takeawaysAgainst_per_game = takeawaysAgainst / GP,
+         giveawaysAgainst_per_game = giveawaysAgainst / GP) %>%
+  select(-GP, -W, -L, -OT, -P, -RW, -ROW, -`S/O Win`, -xGoalsPercentage,
+         -xGoalsFor, -shotsOnGoalFor, -shotAttemptsFor, -goalsFor, 
+         -penaltiesFor, -faceOffsWonFor, -hitsFor, -takeawaysFor, 
+         -giveawaysFor, -xGoalsAgainst, -shotsOnGoalAgainst, 
+         -shotAttemptsAgainst, -goalsAgainst, -penaltiesAgainst, 
+         -faceOffsWonAgainst, -hitsAgainst, -takeawaysAgainst, 
+         -giveawaysAgainst, -shotsFor_per_game, -goalsFor_per_game,
+         -shotsAgainst_per_game, -goalsAgainst_per_game,
+         -penaltiesFor_per_game, -penaltiesAgainst_per_game) %>%
+  rename(PTSperc = `P%`, goalsFor_per_game = `GF/GP`,
+         goalsAgainst_per_game = `GA/GP`, PP_perc = `PP%`,
+         PK_perc = `PK%`, netPP_perc = `Net PP%`, netPK_perc = `Net PK%`,
+         shotsFor_per_game = `Shots/GP`, shotsAgainst_per_game = `SA/GP`) %>%
+  filter(!is.na(next_year_pts_perc))
+  
+  
+```
+so that's the data I want to use to model next season's win percentage
+
+I want to run a number of models, tuning each as needed
+
+first I need to create the folds for 10-fold cross validation
+```{r}
+set.seed(2020)
+
+train_i <- createDataPartition(y = next_year_model_data$next_year_pts_perc,
+                               p = 0.9, list = FALSE) %>%
+  as.numeric()
+
+train_nextyear_data <- next_year_model_data[train_i,]
+test_nextyear_data <- next_year_model_data[-train_i,]
+
+```
+then I will try to use the caret package to build and test models of different types
+
+simple linear regression
+```{r}
+set.seed(2000)
+init_linear_nextyear_train <-
+  train(next_year_pts_perc ~ .,
+        data = next_year_model_data, method = "lm", #can use lots of methods!
+        trControl = trainControl("cv", number = 10),
+        preProcess = c("center", "scale"))
+
+init_linear_nextyear_train$results
+```
