@@ -57,6 +57,63 @@ next_year_model_data <- complex_team_season_data %>%
 ```
 so that's the data I want to use to model next season's win percentage
 
+before, we did clustering of the variables to see if any might be closely related and see if we might eliminate any of them based on the fact that what they account for is also accounted for by something else
+
+```{r}
+nextyear_ex_vars <- dplyr::select(next_year_model_data, -next_year_pts_perc)
+
+exp_cor_matrix <- cor(nextyear_ex_vars)
+
+#create our distance measure
+cor_dist_matrix <- 1 - abs(exp_cor_matrix)
+cor_dist_matrix <- as.dist(cor_dist_matrix)
+```
+then we can do clustering on these distance measures
+
+```{r}
+nextyear_exp_hc <- hclust(cor_dist_matrix, method = "complete")
+
+library(ggdendro)
+ggdendrogram(nextyear_exp_hc, rotate = TRUE, size = 2)
+```
+so it looks like net PP% and PP% are very closely related, as are net PK% and PK%, so I might get rid of the "net" variables...
+the other two that are closely related both conceptually and in the clustering are fenwick% and corsi%-- both are possession metrics based on shot attempts, while corsi includes blocked shots and fenwick does not-- based on this I might get rid of fenwick%
+goal differential and points percent this season are also closely related, so it might be good to get rid of one or the other
+shots and shot attempts are also closely related, both for and against, but they really are different things, so I wouldn't want to exclude anything there. Maybe it could be good to calculate a through-percentage based on those two things to account for both but avoid collinearity issues?
+
+
+adding thru%for and thru%against
+```{r}
+next_year_model_data <- next_year_model_data %>%
+  mutate(shot_thru_perc_for = shotsFor_per_game / shotAttemptsFor_per_game,
+         shot_thru_perc_against = 
+           shotsAgainst_per_game / shotAttemptsAgainst_per_game)
+```
+and then running the clustering again...
+
+```{r}
+nextyear_ex_vars <- dplyr::select(next_year_model_data, -next_year_pts_perc)
+
+exp_cor_matrix <- cor(nextyear_ex_vars)
+
+#create our distance measure
+cor_dist_matrix <- 1 - abs(exp_cor_matrix)
+cor_dist_matrix <- as.dist(cor_dist_matrix)
+
+nextyear_exp_hc <- hclust(cor_dist_matrix, method = "complete")
+
+library(ggdendro)
+ggdendrogram(nextyear_exp_hc, rotate = TRUE, size = 2)
+```
+I think I will go ahead an get rid of the net PP and net PK variables, and Fenwick, but I'll keep the rest for now
+
+```{r}
+next_year_model_data <- next_year_model_data %>%
+  select(-netPP_perc, -netPK_perc, -fenwickPercentage)
+```
+
+
+
 I want to run a number of models, tuning each as needed
 
 first I need to create the folds for 10-fold cross validation
@@ -78,9 +135,205 @@ simple linear regression
 set.seed(2000)
 init_linear_nextyear_train <-
   train(next_year_pts_perc ~ .,
-        data = next_year_model_data, method = "lm", #can use lots of methods!
+        data = train_nextyear_data, method = "lm", #can use lots of methods!
         trControl = trainControl("cv", number = 10),
         preProcess = c("center", "scale"))
 
 init_linear_nextyear_train$results
+```
+so the RMSE to compare with is 0.07508109
+but this has a lot of predictors in it, I wonder whether or not all of these predictors actually have an impact?
+
+```{r}
+summary(init_linear_nextyear_train)
+```
+it looks like GF per game and GA per game are significant predictors, and xG for per game and xG against per game might have a slight impact as well.
+
+I'd like to see if lasso, ridge, and elastic net procedures might outperform this simple linear regression
+```{r}
+alpha_vector <- c(0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1)
+
+set.seed(2003)
+tune_elasticnet_nextyear_train <-
+  train(next_year_pts_perc ~ .,
+        data = train_nextyear_data, method = "glmnet", 
+        trControl = trainControl("cv", number = 10),
+        preProcess = c("center", "scale"),
+        tuneLength = 10)
+
+tune_elasticnet_nextyear_train$results
+```
+
+```{r}
+tune_elasticnet_nextyear_train$bestTune
+```
+```{r}
+tune_elasticnet_nextyear_train$results[29,]
+```
+does it eliminate any variables?
+```{r}
+coef(tune_elasticnet_nextyear_train$finalModel, 
+     tune_elasticnet_nextyear_train$bestTune$lambda)
+```
+so it does get rid of some stuff, like takeaways for and a bunch of the against variables. However, I don't really want to get rid of any of these going forward, since other methods have their own variable selection methods
+
+K nearest neighbors
+```{r}
+set.seed(1966)
+tune_knn_nextyear_train <-
+  train(next_year_pts_perc ~ .,
+        data = train_nextyear_data, method = "knn", 
+        trControl = trainControl("cv", number = 10),
+        preProcess = c("center", "scale"),
+        tuneGrid = expand.grid(k = 2:40)) 
+plot(tune_knn_nextyear_train)
+```
+so it looks like the best is with k = 21, maybe
+```{r}
+tune_knn_nextyear_train$bestTune
+```
+yup...
+```{r}
+tune_knn_nextyear_train$results[9,]
+```
+
+
+GAM
+```{r}
+set.seed(1988)
+init_gam_nextyear_train <-
+  train(next_year_pts_perc ~ .,
+        data = train_nextyear_data, method = "gam", 
+        trControl = trainControl("cv", number = 10),
+        preProcess = c("center", "scale"),
+        tuneGrid = data.frame(method = "GCV.Cp", select = FALSE))
+init_gam_nextyear_train$results
+```
+
+
+Random Forest
+```{r}
+rf_tune_grid <-
+  expand.grid(mtry = seq(3, 18, by = 3),
+              splitrule = "variance",
+              min.node.size = 5)
+
+set.seed(2010)
+init_rf_nextyear_train <-
+  train(next_year_pts_perc ~ ., data = train_nextyear_data,
+        method = "ranger", num.trees = 50, 
+        trControl = trainControl(method = "cv", number = 5),
+        tuneGrid = rf_tune_grid)
+plot(init_rf_nextyear_train)
+```
+```{r}
+init_rf_nextyear_train$bestTune
+```
+```{r}
+init_rf_nextyear_train$results[3,]
+```
+
+
+
+Gradient boosted machine
+
+```{r}
+xgb_tune_grid <- 
+  expand.grid(nrounds = seq(from = 20, to = 200, by = 20),
+              eta = c(0.025, 0.05, 0.1, 0.3, 0.6),
+              max_depth = c(1:4),
+              gamma = 0, colsample_bytree = 1, #leave all vars
+              min_child_weight = 1, #same as node size
+              subsample = 1) #let all data be included
+
+xgb_tune_control <- trainControl(method = "cv", number = 10,
+                                 verboseIter = FALSE)
+
+set.seed(2001)
+init_xgb_tune_nextyear_train <- 
+  train(x = dplyr::select(train_nextyear_data, -next_year_pts_perc),
+                  y = train_nextyear_data$next_year_pts_perc,
+                  trControl = xgb_tune_control,
+                  tuneGrid = xgb_tune_grid,
+                  method = "xgbTree",
+                  verbose = TRUE)
+```
+
+```{r}
+init_xgb_tune_nextyear_train$bestTune
+```
+
+```{r}
+init_xgb_tune_nextyear_train$results[54,]
+```
+
+
+now just like with the other one, I want to create a chart of the RMSEs
+
+linear
+```{r}
+nextyear_linear_test_preds <- predict(init_linear_nextyear_train, test_nextyear_data)
+RMSE(nextyear_linear_test_preds, test_nextyear_data$next_year_pts_perc)
+
+```
+Elastic net
+```{r}
+nextyear_elasticnet_test_preds <- predict(tune_elasticnet_nextyear_train, test_nextyear_data)
+RMSE(nextyear_elasticnet_test_preds, test_nextyear_data$next_year_pts_perc)
+```
+
+KNN
+```{r}
+nextyear_knn_test_preds <- predict(tune_knn_nextyear_train, test_nextyear_data)
+RMSE(nextyear_knn_test_preds, test_nextyear_data$next_year_pts_perc)
+```
+GAM
+```{r}
+nextyear_gam_test_preds <- predict(init_gam_nextyear_train, test_nextyear_data)
+RMSE(nextyear_gam_test_preds, test_nextyear_data$next_year_pts_perc)
+```
+Random forest
+```{r}
+nextyear_rf_test_preds <- predict(init_rf_nextyear_train, test_nextyear_data)
+RMSE(nextyear_rf_test_preds, test_nextyear_data$next_year_pts_perc)
+```
+
+GBM
+```{r}
+nextyear_xgb_test_preds <- predict(init_xgb_tune_nextyear_train, test_nextyear_data)
+RMSE(nextyear_xgb_test_preds, test_nextyear_data$next_year_pts_perc)
+```
+make a chart...
+
+```{r}
+nextyear_rmse <- as_tibble(NULL)
+
+nextyear_rmse <- bind_rows( c(model = "Linear", 
+                              RMSE = RMSE(nextyear_linear_test_preds,
+                                    test_nextyear_data$next_year_pts_perc)),
+                            c(model = "Elastic Net", 
+                              RMSE = RMSE(nextyear_elasticnet_test_preds,
+                                    test_nextyear_data$next_year_pts_perc)),
+                            c(model = "K Nearest Neighbors", 
+                              RMSE = RMSE(nextyear_knn_test_preds,
+                                     test_nextyear_data$next_year_pts_perc)),
+                            c(model = "GAM", 
+                              RMSE = RMSE(nextyear_gam_test_preds,
+                                   test_nextyear_data$next_year_pts_perc)),
+                            c(model = "Random Forest", 
+                              RMSE = RMSE(nextyear_rf_test_preds,
+                                   test_nextyear_data$next_year_pts_perc)),
+                            c(model = "Gradient Boosted", 
+                              RMSE = RMSE(nextyear_xgb_test_preds,
+                                     test_nextyear_data$next_year_pts_perc)))
+
+nextyear_rmse_chart <- nextyear_rmse %>%
+  mutate(RMSE = as.numeric(RMSE)) %>%
+  ggplot(aes(x = model, y = RMSE)) +
+  geom_point() + 
+  coord_flip() +
+  labs(y = "RMSE", x = "Model Type", 
+       title = "Holdout error rate among tuned models") +
+  theme_bw()
+nextyear_rmse_chart
 ```

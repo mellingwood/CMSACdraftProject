@@ -1,0 +1,267 @@
+---
+title: "predicting_next_season"
+output: html_document
+---
+
+now we want to use our random forest to create a distribution of possible season outcomes
+
+I need to basically re-create the random forest model from before, so I need to first manipulate the data like it was in the modeling script
+
+```{r}
+library(tidyverse)
+library(caret)
+library(mgcv)
+library(ranger)
+
+complex_team_season_data <-
+  read_csv("../Data/predictingPpercNextSeason.csv")
+complex_team_season_data <- complex_team_season_data %>%
+  mutate(xGperc = xGoalsFor / (xGoalsFor + xGoalsAgainst))
+```
+
+Now I want to work on modeling next season's win percentage based on this season's stats...
+I think I need to do some data manipulation to turn these into per-game stats and remove some of the named data
+```{r}
+next_year_model_data <- complex_team_season_data %>%
+  select(-team, -season, -season_end, -tm_season) %>%
+  mutate(xGFor_per_game = xGoalsFor / GP, 
+         shotsFor_per_game = shotsOnGoalFor / GP,
+         shotAttemptsFor_per_game = shotAttemptsFor / GP,
+         goalsFor_per_game = goalsFor / GP,
+         penaltiesFor_per_game = penaltiesFor / GP,
+         faceoffsWonFor_per_game = faceOffsWonFor / GP,
+         hitsFor_per_game = hitsFor / GP,
+         takeawaysFor_per_game = takeawaysFor / GP,
+         giveawaysFor_per_game = giveawaysFor / GP,
+         xGAgainst_per_game = xGoalsAgainst / GP,
+         shotsAgainst_per_game = shotsOnGoalAgainst / GP,
+         shotAttemptsAgainst_per_game = shotAttemptsAgainst / GP,
+         goalsAgainst_per_game = goalsAgainst / GP,
+         penaltiesAgainst_per_game = penaltiesAgainst / GP,
+         faceoffsWonAgainst_per_game = faceOffsWonAgainst / GP,
+         hitsAgainst_per_game = hitsAgainst / GP,
+         takeawaysAgainst_per_game = takeawaysAgainst / GP,
+         giveawaysAgainst_per_game = giveawaysAgainst / GP) %>%
+  select(-GP, -W, -L, -OT, -P, -RW, -ROW, -`S/O Win`, -xGoalsPercentage,
+         -xGoalsFor, -shotsOnGoalFor, -shotAttemptsFor, -goalsFor, 
+         -penaltiesFor, -faceOffsWonFor, -hitsFor, -takeawaysFor, 
+         -giveawaysFor, -xGoalsAgainst, -shotsOnGoalAgainst, 
+         -shotAttemptsAgainst, -goalsAgainst, -penaltiesAgainst, 
+         -faceOffsWonAgainst, -hitsAgainst, -takeawaysAgainst, 
+         -giveawaysAgainst, -shotsFor_per_game, -goalsFor_per_game,
+         -shotsAgainst_per_game, -goalsAgainst_per_game,
+         -penaltiesFor_per_game, -penaltiesAgainst_per_game) %>%
+  rename(PTSperc = `P%`, goalsFor_per_game = `GF/GP`,
+         goalsAgainst_per_game = `GA/GP`, PP_perc = `PP%`,
+         PK_perc = `PK%`, netPP_perc = `Net PP%`, netPK_perc = `Net PK%`,
+         shotsFor_per_game = `Shots/GP`, shotsAgainst_per_game = `SA/GP`) %>%
+  filter(!is.na(next_year_pts_perc))
+  
+#adding thru%for and against
+next_year_model_data <- next_year_model_data %>%
+  mutate(shot_thru_perc_for = shotsFor_per_game / shotAttemptsFor_per_game,
+         shot_thru_perc_against = 
+           shotsAgainst_per_game / shotAttemptsAgainst_per_game)
+```
+
+
+
+I want to run a number of models, tuning each as needed
+
+first I need to create the folds for 10-fold cross validation
+```{r}
+set.seed(2020)
+
+train_i <- createDataPartition(y = next_year_model_data$next_year_pts_perc,
+                               p = 0.9, list = FALSE) %>%
+  as.numeric()
+
+train_nextyear_data <- next_year_model_data[train_i,]
+test_nextyear_data <- next_year_model_data[-train_i,]
+
+```
+
+then build the model...
+Random Forest
+```{r}
+rf_tune_grid <-
+  expand.grid(mtry = seq(3, 18, by = 3),
+              splitrule = "variance",
+              min.node.size = 5)
+
+set.seed(2010)
+init_rf_nextyear_train <-
+  train(next_year_pts_perc ~ ., data = train_nextyear_data,
+        method = "ranger", num.trees = 50, 
+        trControl = trainControl(method = "cv", number = 5),
+        tuneGrid = rf_tune_grid)
+plot(init_rf_nextyear_train)
+```
+
+```{r}
+init_rf_nextyear_train$bestTune
+```
+
+```{r}
+init_rf_nextyear_train$results[3,]
+```
+
+
+so now I want to build a model using the ranger package and these tuned parameters
+```{r}
+final_rf_next_year <- ranger(next_year_pts_perc ~ .,
+                             data = next_year_model_data,
+                             splitrule = "variance",
+                             min.node.size = 5,
+                             mtry = 9,
+                             num.trees = 50)
+```
+
+so I have the model, and now I need to get predictions from this model for the 2020-21 season
+
+first I want a dataset that is just the current season...
+```{r}
+just_this_season <- complex_team_season_data
+
+just_this_season <- just_this_season %>%
+  mutate(xGFor_per_game = xGoalsFor / GP, 
+         shotsFor_per_game = shotsOnGoalFor / GP,
+         shotAttemptsFor_per_game = shotAttemptsFor / GP,
+         goalsFor_per_game = goalsFor / GP,
+         penaltiesFor_per_game = penaltiesFor / GP,
+         faceoffsWonFor_per_game = faceOffsWonFor / GP,
+         hitsFor_per_game = hitsFor / GP,
+         takeawaysFor_per_game = takeawaysFor / GP,
+         giveawaysFor_per_game = giveawaysFor / GP,
+         xGAgainst_per_game = xGoalsAgainst / GP,
+         shotsAgainst_per_game = shotsOnGoalAgainst / GP,
+         shotAttemptsAgainst_per_game = shotAttemptsAgainst / GP,
+         goalsAgainst_per_game = goalsAgainst / GP,
+         penaltiesAgainst_per_game = penaltiesAgainst / GP,
+         faceoffsWonAgainst_per_game = faceOffsWonAgainst / GP,
+         hitsAgainst_per_game = hitsAgainst / GP,
+         takeawaysAgainst_per_game = takeawaysAgainst / GP,
+         giveawaysAgainst_per_game = giveawaysAgainst / GP) %>%
+  select(-GP, -W, -L, -OT, -P, -RW, -ROW, -`S/O Win`, -xGoalsPercentage,
+         -xGoalsFor, -shotsOnGoalFor, -shotAttemptsFor, -goalsFor, 
+         -penaltiesFor, -faceOffsWonFor, -hitsFor, -takeawaysFor, 
+         -giveawaysFor, -xGoalsAgainst, -shotsOnGoalAgainst, 
+         -shotAttemptsAgainst, -goalsAgainst, -penaltiesAgainst, 
+         -faceOffsWonAgainst, -hitsAgainst, -takeawaysAgainst, 
+         -giveawaysAgainst, -shotsFor_per_game, -goalsFor_per_game,
+         -shotsAgainst_per_game, -goalsAgainst_per_game,
+         -penaltiesFor_per_game, -penaltiesAgainst_per_game) %>%
+  rename(PTSperc = `P%`, goalsFor_per_game = `GF/GP`,
+         goalsAgainst_per_game = `GA/GP`, PP_perc = `PP%`,
+         PK_perc = `PK%`, netPP_perc = `Net PP%`, netPK_perc = `Net PK%`,
+         shotsFor_per_game = `Shots/GP`, shotsAgainst_per_game = `SA/GP`)
+```
+
+```{r}
+#adding thru%for and against
+just_this_season <- just_this_season %>%
+  mutate(shot_thru_perc_for = shotsFor_per_game / shotAttemptsFor_per_game,
+         shot_thru_perc_against = 
+           shotsAgainst_per_game / shotAttemptsAgainst_per_game)
+
+just_this_season <- just_this_season %>%
+  filter(is.na(next_year_pts_perc))
+  
+```
+
+now to get predictions...
+
+```{r}
+tree_predictions <- predict(final_rf_next_year, data = just_this_season,
+                             predict.all = TRUE)
+```
+
+now I want to randomly sample a prediction from the trees in the forest for each team
+```{r}
+one_prediction <- just_this_season %>%
+  select(team)
+
+pred_locs <- sample(1:50, 31, replace = FALSE)
+these_preds <- rep(0, 31)
+
+for(team_i in 1:31) {
+  
+  this_pred <- tree_predictions$predictions[team_i, pred_locs[team_i]]
+  these_preds[team_i] <- this_pred
+}
+
+one_prediction <- one_prediction %>%
+  bind_cols(predicted_pts_perc = these_preds)
+
+one_prediction <- one_prediction %>%
+  mutate(rank = dense_rank(desc(predicted_pts_perc)))
+
+pit_rank <- one_prediction %>%
+  filter(team == "PIT") %>%
+  select(rank)
+
+```
+so that does it once... I want to do it a bunch of times...
+
+```{r}
+simulated_pit_ranks <- rep(0, 10000)
+
+for(iter_j in 1:10000) {
+  one_prediction <- just_this_season %>%
+    select(team)
+
+  pred_locs <- sample(1:50, 31, replace = FALSE)
+  these_preds <- rep(0, 31)
+
+  for(team_i in 1:31) {
+  
+    this_pred <- tree_predictions$predictions[team_i, pred_locs[team_i]]
+    these_preds[team_i] <- this_pred
+  }
+
+  one_prediction <- one_prediction %>%
+    bind_cols(predicted_pts_perc = these_preds)
+
+  one_prediction <- one_prediction %>%
+    mutate(rank = dense_rank(desc(predicted_pts_perc)))
+
+  pit_rank <- one_prediction %>%
+    filter(team == "PIT") %>%
+    select(rank)
+  
+  simulated_pit_ranks[iter_j] <- as.numeric(pit_rank)
+
+}
+
+simulated_pit_ranks <- as_tibble(simulated_pit_ranks) %>%
+  rename(rank = value)
+
+```
+ so now I have 10000 simulations of the season, determining what rank the Penguins finished in for each one...
+ 
+I kind of want to see what that distribution looks like
+```{r}
+summary(simulated_pit_ranks)
+```
+
+```{r}
+simulated_pit_ranks %>%
+  ggplot(aes(x = rank)) +
+  geom_histogram(bins = 31) +
+  theme_bw()
+```
+now to calculate the probability that the Penguins finish in each spot in the standings...
+```{r}
+possible_ranks <- c(1:31)
+probs <- rep(0, 31)
+
+for(rank_i in 1:31) {
+  probs[rank_i] <- sum(simulated_pit_ranks$rank == rank_i) / 10000
+}
+
+end_rank_probabilities <- bind_cols(possible_ranks = possible_ranks,
+                                    probability = probs)
+
+```
+
+so that creates a dataframe showing the probability of each rank being achieved

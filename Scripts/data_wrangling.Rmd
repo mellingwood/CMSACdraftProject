@@ -262,6 +262,10 @@ complex_team_season_data <-
 complex_team_season_data <- complex_team_season_data %>%
   mutate(season_end = season)
 
+complex_team_season_data$team <-
+  ifelse(complex_team_season_data$team == "ATL", "WPG",
+         complex_team_season_data$team)
+
 complex_team_season_data$season_end <- 
   ifelse(complex_team_season_data$season == "2008-09", 2009,
          complex_team_season_data$season_end)
