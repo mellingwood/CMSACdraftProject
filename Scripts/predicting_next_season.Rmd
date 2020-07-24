@@ -92,7 +92,7 @@ rf_tune_grid <-
 set.seed(2010)
 init_rf_nextyear_train <-
   train(next_year_pts_perc ~ ., data = train_nextyear_data,
-        method = "ranger", num.trees = 50, 
+        method = "ranger", num.trees = 500, 
         trControl = trainControl(method = "cv", number = 5),
         tuneGrid = rf_tune_grid)
 plot(init_rf_nextyear_train)
@@ -114,7 +114,7 @@ final_rf_next_year <- ranger(next_year_pts_perc ~ .,
                              splitrule = "variance",
                              min.node.size = 5,
                              mtry = 9,
-                             num.trees = 50)
+                             num.trees = 500)
 ```
 
 so I have the model, and now I need to get predictions from this model for the 2020-21 season
@@ -181,7 +181,7 @@ now I want to randomly sample a prediction from the trees in the forest for each
 one_prediction <- just_this_season %>%
   select(team)
 
-pred_locs <- sample(1:50, 31, replace = FALSE)
+pred_locs <- sample(1:500, 31, replace = FALSE)
 these_preds <- rep(0, 31)
 
 for(team_i in 1:31) {
@@ -206,11 +206,12 @@ so that does it once... I want to do it a bunch of times...
 ```{r}
 simulated_pit_ranks <- rep(0, 10000)
 
+set.seed(2020)
 for(iter_j in 1:10000) {
   one_prediction <- just_this_season %>%
     select(team)
 
-  pred_locs <- sample(1:50, 31, replace = FALSE)
+  pred_locs <- sample(1:500, 31, replace = FALSE)
   these_preds <- rep(0, 31)
 
   for(team_i in 1:31) {
@@ -223,7 +224,7 @@ for(iter_j in 1:10000) {
     bind_cols(predicted_pts_perc = these_preds)
 
   one_prediction <- one_prediction %>%
-    mutate(rank = dense_rank(desc(predicted_pts_perc)))
+    mutate(rank = rank(desc(predicted_pts_perc), ties.method = "random"))
 
   pit_rank <- one_prediction %>%
     filter(team == "PIT") %>%
@@ -265,3 +266,109 @@ end_rank_probabilities <- bind_cols(possible_ranks = possible_ranks,
 ```
 
 so that creates a dataframe showing the probability of each rank being achieved
+
+we also want to combine these probabilities with the draft lottery probabilities, so to do this we are going to simulate the draft a bunch of times
+
+```{r}
+
+many_predictions <- just_this_season %>%
+  select(team)
+
+set.seed(2020)
+for(iter_j in 1:10000) {
+  one_prediction <- just_this_season %>%
+    select(team)
+
+  pred_locs <- sample(1:500, 31, replace = FALSE)
+  these_preds <- rep(0, 31)
+
+  for(team_i in 1:31) {
+  
+    this_pred <- tree_predictions$predictions[team_i, pred_locs[team_i]]
+    these_preds[team_i] <- this_pred
+  }
+
+  one_prediction <- one_prediction %>%
+    bind_cols(predicted_pts_perc = these_preds)
+
+  one_prediction <- one_prediction %>%
+    mutate(rank = rank(desc(predicted_pts_perc), ties.method = "random"))
+  
+  many_predictions <- many_predictions %>%
+    bind_cols(predicted_rank = one_prediction$rank)
+    
+
+}
+```
+so that leaves me with a dataset of the 10000 season outcomes, with each team's rankings... now I need to simulate the draft for each of these 10000 season outcomes
+
+```{r}
+draft_pick_order_simulations <- just_this_season %>%
+  select(team)
+
+pick_order <- rep(0, 31)
+
+set.seed(2021)
+for(iter_j in 1:10000) {
+  one_simulation <- just_this_season %>%
+    select(team)
+
+  this_season_outcome <- many_predictions %>%
+    select(iter_j+1)
+  
+  colnames(this_season_outcome)[1] <- "tmrank"
+    
+  this_season_outcome <- this_season_outcome %>%
+    bind_cols(team = many_predictions$team)
+  
+  best_16 <- this_season_outcome %>%
+    filter(tmrank < 17) %>%
+    mutate(pick_order = 32 - tmrank)
+  
+  this_draft_order <- best_16
+  
+  worst_15 <- this_season_outcome %>%
+    filter(tmrank >= 17) %>%
+    mutate(init_pick_order = 32 - tmrank, pick_order = 0)
+  
+  #find the number 1 spot:
+  who_gets_1 <- sample(1:15, size = 1, replace = FALSE, 
+                       prob = c(18.5, 13.5, 11.5, 9.5, 8.5, 7.5, 6.5, 6.0,
+                                5.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0))
+  
+  probabilities <- as.vector(c(18.5, 13.5, 11.5, 9.5, 8.5, 7.5, 6.5, 6.0,
+                                5.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0))
+  
+  for (pick_i in 1:3) {
+    who_gets_this_pick <- sample(1:(16-pick_i), size = 1, replace = FALSE, 
+                       prob = probabilities)
+    
+    team_getting_pick <- worst_15 %>%
+      filter(init_pick_order == who_gets_this_pick)
+    team_getting_pick$pick_order <- pick_i
+    
+    this_draft_order <- this_draft_order %>%
+      bind_rows(team_getting_pick)
+    
+    worst_15 <- worst_15 %>%
+      filter(init_pick_order != who_gets_this_pick)
+    
+    probabilities <- probabilities[-who_gets_this_pick]
+  }
+  
+  worst_15$pick_order <- rank(worst_15$init_pick_order) + 3
+  
+  this_draft_order <- this_draft_order %>%
+    bind_rows(worst_15)
+  
+  draft_pick_order_simulations <- draft_pick_order_simulations %>%
+    bind_cols(predicted_pick_order = this_draft_order$pick_order)
+
+}
+```
+
+so now I have 10,000 simulated drafts based on 10,000 simulated seasons
+what is the probability of the Penguins ending up in a given draft pick spot?
+
+
+

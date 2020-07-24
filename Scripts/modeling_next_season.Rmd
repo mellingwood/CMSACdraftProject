@@ -194,7 +194,7 @@ tune_knn_nextyear_train$bestTune
 ```
 yup...
 ```{r}
-tune_knn_nextyear_train$results[9,]
+tune_knn_nextyear_train$results[11,]
 ```
 
 
@@ -221,7 +221,7 @@ rf_tune_grid <-
 set.seed(2010)
 init_rf_nextyear_train <-
   train(next_year_pts_perc ~ ., data = train_nextyear_data,
-        method = "ranger", num.trees = 50, 
+        method = "ranger", num.trees = 500, 
         trControl = trainControl(method = "cv", number = 5),
         tuneGrid = rf_tune_grid)
 plot(init_rf_nextyear_train)
@@ -230,7 +230,7 @@ plot(init_rf_nextyear_train)
 init_rf_nextyear_train$bestTune
 ```
 ```{r}
-init_rf_nextyear_train$results[3,]
+init_rf_nextyear_train$results[1,]
 ```
 
 
@@ -264,7 +264,7 @@ init_xgb_tune_nextyear_train$bestTune
 ```
 
 ```{r}
-init_xgb_tune_nextyear_train$results[54,]
+init_xgb_tune_nextyear_train$results[85,]
 ```
 
 
@@ -328,7 +328,8 @@ nextyear_rmse <- bind_rows( c(model = "Linear",
                                      test_nextyear_data$next_year_pts_perc)))
 
 nextyear_rmse_chart <- nextyear_rmse %>%
-  mutate(RMSE = as.numeric(RMSE)) %>%
+  mutate(RMSE = as.numeric(RMSE), 
+         model = fct_reorder(model, RMSE)) %>%
   ggplot(aes(x = model, y = RMSE)) +
   geom_point() + 
   coord_flip() +
