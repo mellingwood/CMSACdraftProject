@@ -62,6 +62,7 @@ next_year_model_data <- next_year_model_data %>%
   mutate(shot_thru_perc_for = shotsFor_per_game / shotAttemptsFor_per_game,
          shot_thru_perc_against = 
            shotsAgainst_per_game / shotAttemptsAgainst_per_game)
+
 ```
 
 
@@ -103,7 +104,7 @@ init_rf_nextyear_train$bestTune
 ```
 
 ```{r}
-init_rf_nextyear_train$results[3,]
+init_rf_nextyear_train$results[1,]
 ```
 
 
@@ -113,8 +114,9 @@ final_rf_next_year <- ranger(next_year_pts_perc ~ .,
                              data = next_year_model_data,
                              splitrule = "variance",
                              min.node.size = 5,
-                             mtry = 9,
-                             num.trees = 500)
+                             mtry = 3,
+                             num.trees = 500, 
+                             importance = "impurity")
 ```
 
 so I have the model, and now I need to get predictions from this model for the 2020-21 season
@@ -154,15 +156,41 @@ just_this_season <- just_this_season %>%
   rename(PTSperc = `P%`, goalsFor_per_game = `GF/GP`,
          goalsAgainst_per_game = `GA/GP`, PP_perc = `PP%`,
          PK_perc = `PK%`, netPP_perc = `Net PP%`, netPK_perc = `Net PK%`,
-         shotsFor_per_game = `Shots/GP`, shotsAgainst_per_game = `SA/GP`)
+         shotsFor_per_game = `Shots/GP`, shotsAgainst_per_game = `SA/GP`) %>%
+  #pretty names for plots
+  rename(`Points Percent` = PTSperc, 
+         `Goals For Per Game` = goalsFor_per_game,
+         `Goals Against Per Game` = goalsAgainst_per_game,
+         `Powerplay Percent` = PP_perc, `Penalty Kill Percent` = PK_perc,
+         `Net Powerplay Percent` = netPP_perc,
+         `Net Penalty Kill Percent` = netPK_perc,
+         `Shots For Per Game` = shotsFor_per_game,
+         `Shots Against Per Game` = shotsAgainst_per_game,
+         `Corsi Percent` = corsiPercentage, 
+         `Fenwick Percent` = fenwickPercentage,
+         `Goal Differential` = goalDifferential,
+         `xG Percent` = xGperc,
+         `xG For Per Game` = xGFor_per_game,
+         `Shot Attempts For Per Game` = shotAttemptsFor_per_game,
+         `Faceoffs Won For Per Game` = faceoffsWonFor_per_game,
+         `Hits For Per Game` = hitsFor_per_game,
+         `Takeaways For Per Game` = takeawaysFor_per_game,
+         `Giveaways For Per Game` = giveawaysFor_per_game,
+         `xG Against Per Game` = xGAgainst_per_game,
+         `Shot Attempts Against Per Game` = shotAttemptsAgainst_per_game,
+         `Faceoffs Won Against Per Game` = faceoffsWonAgainst_per_game,
+         `Hits Against Per Game` = hitsAgainst_per_game,
+         `Takeaways Against Per Game` = takeawaysAgainst_per_game,
+         `Giveaways Against Per Game` = giveawaysAgainst_per_game)
 ```
 
 ```{r}
 #adding thru%for and against
 just_this_season <- just_this_season %>%
-  mutate(shot_thru_perc_for = shotsFor_per_game / shotAttemptsFor_per_game,
-         shot_thru_perc_against = 
-           shotsAgainst_per_game / shotAttemptsAgainst_per_game)
+  mutate(`Shot Through Percent For` = 
+           `Shots For Per Game` / `Shot Attempts For Per Game`,
+         `Shot Through Percent Against` = 
+           `Shots Against Per Game` / `Shot Attempts Against Per Game`)
 
 just_this_season <- just_this_season %>%
   filter(is.na(next_year_pts_perc))
@@ -363,15 +391,19 @@ for(iter_j in 1:10000) {
   this_draft_order <- this_draft_order %>%
     bind_rows(worst_15)
   
-  simulated_pit_picks[iter_j] <- this_draft_order %>%
+  pit_pick <- this_draft_order %>%
     filter(team == "PIT") %>%
     select(pick_order)
+  
+  simulated_pit_picks[iter_j] <- as.numeric(pit_pick)
   
   draft_pick_order_simulations <- draft_pick_order_simulations %>%
     bind_cols(predicted_pick_order = this_draft_order$pick_order)
 
 }
+```
 
+```{r}
 simulated_pit_picks <- as_tibble(simulated_pit_picks) %>%
   rename(pick = value)
 ```
@@ -384,6 +416,8 @@ what is the probability of the Penguins ending up in a given draft pick spot?
 
 summary(simulated_pit_picks)
 ```
+
+
 ```{r}
 as_tibble(simulated_pit_picks) %>%
   ggplot(aes(x = pick)) +
@@ -414,4 +448,78 @@ write_csv(pick_order_probabilities, "../Data/pickOrderProbabilities.csv")
 ```
 
 
+I need to generate and save some plots for the presentation...
+
+```{r}
+mtry_plot <- plot(init_rf_nextyear_train)
+mtry_plot
+```
+```{r}
+#ggsave("../Images/mtry_plot.jpg", plot = mtry_plot,
+       #width = 6, height = 4)
+```
+won't ggsave because it's not a ggplot object, sad. I need to manually export it.
+
+
+histogram of simulated ranks
+```{r}
+pit_ranks_hist <- simulated_pit_ranks %>%
+  ggplot(aes(x = rank)) +
+  geom_histogram(bins = 31) +
+  labs(x = "Rank", y = "Count", 
+       title = "Simulated End-of-Season Ranks for the Pittsburgh 
+       Penguins 2020-21",
+       caption = "10,000 simulations using random forest trees") +
+  theme_bw()
+pit_ranks_hist
+```
+```{r}
+ggsave("../Images/pit_ranks_hist.jpg", plot = pit_ranks_hist,
+       width = 6, height = 4)
+```
+
+histogram of simulated draft picks
+```{r}
+pit_picks_hist <- simulated_pit_picks %>%
+  ggplot(aes(x = pick)) +
+  geom_histogram(bins = 31) +
+  labs(x = "Pick", y = "Count", title = "Simulated 2021 Draft Pick Spots for the Pittsburgh Penguins", caption = "10,000 simulations of the draft lottery based on simulated end-of-season ranks") +
+  theme_bw()
+pit_picks_hist
+```
+```{r}
+ggsave("../Images/pit_picks_hist.jpg", plot = pit_picks_hist,
+       width = 6, height = 4)
+```
+
+variable importance plot showing what variables were used in the random forest model
+
+```{r}
+library(vip)
+```
+
+```{r}
+vip(final_rf_next_year, geom = "point") +
+  theme_bw()
+```
+
+```{r}
+variable_importance_plot <- vip(final_rf_next_year, geom = "point") +
+  labs(title = "Importance of This-Season Variables in 
+  Predicting Next Year's Success", 
+       caption = "Using a random forest with 500 trees and 3 randomly selected variables") +
+  scale_x_discrete(labels = rev(c("xG Percent", "Goal Differential",
+                              "Fenwick Percentage", "Points Percent",
+                              "xG Against Per Game", "xG For Per Game",
+                              "Shot Attempts Against Per Game",
+                              "Shots Against Per Game", "Corsi Percentage",
+                              "Goals For Per Game"))) +
+  theme_bw()
+
+variable_importance_plot
+```
+```{r}
+ggsave("../Images/variable_importance_plot.jpg", 
+       plot = variable_importance_plot, width = 6, height = 4)
+```
 

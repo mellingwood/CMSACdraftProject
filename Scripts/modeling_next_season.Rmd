@@ -18,7 +18,7 @@ complex_team_season_data <- complex_team_season_data %>%
 Now I want to work on modeling next season's win percentage based on this season's stats...
 I think I need to do some data manipulation to turn these into per-game stats and remove some of the named data
 ```{r}
-next_year_model_data <- complex_team_season_data %>%
+next_year_model_data_orig <- complex_team_season_data %>%
   select(-team, -season, -season_end, -tm_season) %>%
   mutate(xGFor_per_game = xGoalsFor / GP, 
          shotsFor_per_game = shotsOnGoalFor / GP,
@@ -60,7 +60,8 @@ so that's the data I want to use to model next season's win percentage
 before, we did clustering of the variables to see if any might be closely related and see if we might eliminate any of them based on the fact that what they account for is also accounted for by something else
 
 ```{r}
-nextyear_ex_vars <- dplyr::select(next_year_model_data, -next_year_pts_perc)
+nextyear_ex_vars <- dplyr::select(next_year_model_data_orig,
+                                  -next_year_pts_perc)
 
 exp_cor_matrix <- cor(nextyear_ex_vars)
 
@@ -84,7 +85,7 @@ shots and shot attempts are also closely related, both for and against, but they
 
 adding thru%for and thru%against
 ```{r}
-next_year_model_data <- next_year_model_data %>%
+next_year_model_data <- next_year_model_data_orig %>%
   mutate(shot_thru_perc_for = shotsFor_per_game / shotAttemptsFor_per_game,
          shot_thru_perc_against = 
            shotsAgainst_per_game / shotAttemptsAgainst_per_game)
@@ -338,3 +339,58 @@ nextyear_rmse_chart <- nextyear_rmse %>%
   theme_bw()
 nextyear_rmse_chart
 ```
+```{r}
+ggsave("../Images/nextyear_rmse_chart.jpg", plot = nextyear_rmse_chart, 
+       width = 6, height = 4)
+```
+and I want that dendrogram from before as a plot, but I need pretty variable names...
+```{r}
+nextyear_ex_vars <- 
+  dplyr::select(next_year_model_data_orig, -next_year_pts_perc) %>%
+  rename(`Points Percent` = PTSperc, 
+         `Goals For Per Game` = goalsFor_per_game,
+         `Goals Against Per Game` = goalsAgainst_per_game,
+         `Powerplay Percent` = PP_perc, `Penalty Kill Percent` = PK_perc,
+         `Net Powerplay Percent` = netPP_perc,
+         `Net Penalty Kill Percent` = netPK_perc,
+         `Shots For Per Game` = shotsFor_per_game,
+         `Shots Against Per Game` = shotsAgainst_per_game,
+         `Corsi Percent` = corsiPercentage, 
+         `Fenwick Percent` = fenwickPercentage,
+         `Goal Differential` = goalDifferential,
+         `xG Percent` = xGperc,
+         `xG For Per Game` = xGFor_per_game,
+         `Shot Attempts For Per Game` = shotAttemptsFor_per_game,
+         `Faceoffs Won For Per Game` = faceoffsWonFor_per_game,
+         `Hits For Per Game` = hitsFor_per_game,
+         `Takeaways For Per Game` = takeawaysFor_per_game,
+         `Giveaways For Per Game` = giveawaysFor_per_game,
+         `xG Against Per Game` = xGAgainst_per_game,
+         `Shot Attempts Against Per Game` = shotAttemptsAgainst_per_game,
+         `Faceoffs Won Against Per Game` = faceoffsWonAgainst_per_game,
+         `Hits Against Per Game` = hitsAgainst_per_game,
+         `Takeaways Against Per Game` = takeawaysAgainst_per_game,
+         `Giveaways Against Per Game` = giveawaysAgainst_per_game)
+
+```
+
+```{r}
+exp_cor_matrix <- cor(nextyear_ex_vars)
+
+#create our distance measure
+cor_dist_matrix <- 1 - abs(exp_cor_matrix)
+cor_dist_matrix <- as.dist(cor_dist_matrix)
+
+nextyear_exp_hc <- hclust(cor_dist_matrix, method = "complete")
+
+library(ggdendro)
+vars_dendrogram <- ggdendrogram(nextyear_exp_hc, rotate = TRUE, size = 2) +
+  labs(y = "Distance")
+vars_dendrogram
+```
+```{r}
+ggsave("../Images/variable_dendrogram.jpg", plot = vars_dendrogram, 
+       width = 6, height = 4)
+```
+
+I may not even end up using this dendrogram, because it turns out that the random forest kept Fenwick and Corsi both, even though this indicates that Fenwick and Corsi are closely related...
