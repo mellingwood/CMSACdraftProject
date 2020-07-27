@@ -308,6 +308,8 @@ draft_pick_order_simulations <- just_this_season %>%
 
 pick_order <- rep(0, 31)
 
+simulated_pit_picks <- rep(0, 10000)
+
 set.seed(2021)
 for(iter_j in 1:10000) {
   one_simulation <- just_this_season %>%
@@ -361,14 +363,55 @@ for(iter_j in 1:10000) {
   this_draft_order <- this_draft_order %>%
     bind_rows(worst_15)
   
+  simulated_pit_picks[iter_j] <- this_draft_order %>%
+    filter(team == "PIT") %>%
+    select(pick_order)
+  
   draft_pick_order_simulations <- draft_pick_order_simulations %>%
     bind_cols(predicted_pick_order = this_draft_order$pick_order)
 
 }
+
+simulated_pit_picks <- as_tibble(simulated_pit_picks) %>%
+  rename(pick = value)
 ```
 
 so now I have 10,000 simulated drafts based on 10,000 simulated seasons
 what is the probability of the Penguins ending up in a given draft pick spot?
+
+```{r}
+
+
+summary(simulated_pit_picks)
+```
+```{r}
+as_tibble(simulated_pit_picks) %>%
+  ggplot(aes(x = pick)) +
+  geom_histogram(bins = 31) +
+  theme_bw()
+```
+now to calculate the probability that the Penguins get each pick...
+```{r}
+
+
+possible_picks <- c(1:31)
+probs_picks <- rep(0, 31)
+
+for(pick_spot_i in 1:31) {
+  probs_picks[pick_spot_i] <- sum(simulated_pit_picks$pick == pick_spot_i) / 10000
+}
+
+pick_order_probabilities <- bind_cols(possible_pick = possible_picks,
+                                    probability = probs_picks)
+
+```
+
+so that creates a dataframe showing the probability of each rank being achieved
+
+I want to export that as a csv so I can use it in another script...
+```{r}
+write_csv(pick_order_probabilities, "../Data/pickOrderProbabilities.csv")
+```
 
 
 

@@ -1,0 +1,52 @@
+---
+title: "combining_subquestions"
+output: html_document
+---
+
+I want to create an index that describes the potential value of this year's first round draft pick versus next year's first round draft pick.
+
+inputting the data...
+```{r}
+predicted_pick_value <- read_csv("../Data/predictingPickValue.csv")
+pick_order_probabilities <- read_csv("../Data/pickOrderProbabilities.csv")
+```
+```{r}
+library(tidyverse)
+```
+
+I need to combine those two datasets into one...
+```{r}
+predicted_pick_value <- predicted_pick_value %>%
+  select(Overall, predictedAvgPSperSeason) %>%
+  rename(possible_pick = Overall) %>%
+  filter(possible_pick < 32) %>%
+  distinct()
+```
+
+```{r}
+next_year_pick_value <- left_join(pick_order_probabilities,
+                                  predicted_pick_value, 
+                                  by = "possible_pick")
+```
+I will create a new column that is the probability of getting that pick times the average PS per season of the pick-- like a probability value...
+
+```{r}
+next_year_pick_value <- next_year_pick_value %>%
+  mutate(value_prob = probability * predictedAvgPSperSeason)
+```
+and the "value" of next year's first round pick is the sum of those probability-values...
+```{r}
+next_year_pick_value %>%
+  summarize(value = sum(value_prob))
+```
+
+So next year's first round draft pick can be given a "value" of 2.278906
+
+and I need to compute this year's value...
+```{r}
+7/8 * next_year_pick_value$predictedAvgPSperSeason[15] +
+  1/8 * next_year_pick_value$predictedAvgPSperSeason[1]
+```
+so this year's first round draft pick can be given a value of 2.968304
+
+This year's draft pick is more valuable than next year's so the Penguins should keep their 2020 first round pick and instead give their 2021 first-round pick.

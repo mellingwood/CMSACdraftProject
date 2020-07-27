@@ -1,0 +1,52 @@
+---
+title: "TeamPredictions_Script"
+author: "Jill Reiner"
+date: "7/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+```
+
+```{r}
+rates_fulldata <- read_csv("../Data/rates_fulldata.csv")
+```
+
+
+```{r}
+lm1 <- lm(avgPSperseason ~ Overall + Overall^2 + (1 / Overall) + log(Overall), data = rates_fulldata)
+
+rates_fulldata$lm_preds <- predict(lm1, rates_fulldata)
+summary(lm1)
+```
+
+```{r}
+rates_fulldata$lm_preds[rates_fulldata$Overall == 1] <- 7.0095431
+#replacing 1st and 2nd overall picks with historical mean across their respective picks instead of lm predictions
+rates_fulldata$lm_preds[rates_fulldata$Overall == 2] <- 5.5005517
+```
+
+```{r}
+rates_fulldata %>%
+  ggplot(aes(x = Overall,
+             y = lm_preds)) +
+  geom_line(color = "gold", size = 1) +
+  scale_x_continuous(limits = c(1,31)) +
+  theme_bw()
+```
+
+```{r}
+rates_fulldata <- rates_fulldata %>%
+  rename(predictedAvgPSperSeason = lm_preds)
+```
+
+
+update the rates_fulldata.csv with these predicted average point shares per season
+
+```{r}
+write_csv(rates_fulldata, "../Data/predictingPickValue.csv")
+```
+
+
