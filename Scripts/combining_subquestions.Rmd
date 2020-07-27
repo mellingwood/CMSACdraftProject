@@ -50,3 +50,13 @@ and I need to compute this year's value...
 so this year's first round draft pick can be given a value of 2.968304
 
 This year's draft pick is more valuable than next year's so the Penguins should keep their 2020 first round pick and instead give their 2021 first-round pick.
+
+What happens if we lose the lottery and are going to get pick 15? The value would just be the point shares per season for the 15th spot...
+
+```{r}
+next_year_pick_value$predictedAvgPSperSeason[15]
+```
+this is still marginally better than the draft value for next year, so I would still say that they should keep the 2020 pick, even if they're guaranteed the 15th spot, because they're more likely to get an even worse spot next year and the value drops off so much.
+
+There was also a question of trading the 1st or 15th pick, and what picks would be worth making that trade for...
+The value of the 1st or 15th pick is 2.968, so it would be a "trade-up" if we could improve on that value. Pick 9 has a predicted point shares per season of 3.067, while pick 10 has a value of 2.92. They could improve the value by trading for a guaranteed 9 or better...
